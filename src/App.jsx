@@ -38,19 +38,29 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) { setAuthReady(true); return; }
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
-    return () => subscription.unsubscribe();
+    let alive = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+      if (alive) setSession(next);
+    });
+    withTimeout(supabase.auth.getSession(), 'Authentication check')
+      .then(({ data, error: authError }) => {
+        if (!alive) return;
+        if (authError) setError(authError.message);
+        setSession(data?.session || null);
+      })
+      .catch(e => { if (alive) setError(e?.message || 'Could not check authentication.'); })
+      .finally(() => { if (alive) setAuthReady(true); });
+    return () => { alive = false; subscription.unsubscribe(); };
   }, []);
 
   const loadWorkspace = useCallback(async () => {
     if (!supabase || !session?.user) return;
     setLoading(true); setError(''); setMessage('');
     try {
-      const [roleRes, uomRes] = await Promise.all([
+      const [roleRes, uomRes] = await withTimeout(Promise.all([
         supabase.from('user_company_roles').select('company_id,is_default,companies(id,company_code,display_name,legal_name,is_active)').eq('user_id', session.user.id),
         supabase.from('uom_master').select('id,uom_code,uom_name,uom_category,decimal_places').eq('is_active', true).order('uom_code')
-      ]);
+      ]), 'Company and UOM lookup');
       if (roleRes.error) throw roleRes.error;
       if (uomRes.error) throw uomRes.error;
       const available = (roleRes.data || []).map(row => ({ ...row.companies, is_default: row.is_default })).filter(c => c?.is_active);
@@ -58,7 +68,7 @@ export default function App() {
       const selected = available.find(c => c.id === company?.id) || available.find(c => c.is_default) || available[0] || null;
       setCompany(selected);
       if (!selected) { setItems([]); setError('No active company is assigned to this account. Ask your ERP administrator to assign a company role.'); return; }
-      const itemRes = await supabase.from('item_master').select('id,company_id,item_code,item_name,description,item_type,item_class,item_subclass,base_uom_id,hsn_code,gst_rate,standard_rate,drawing_number,revision,is_batch_tracked,is_serial_tracked,is_active,created_at,updated_at,uom_master:uom_master!item_master_base_uom_id_fkey(uom_code,uom_name)').eq('company_id', selected.id).order('item_code').limit(1000);
+      const itemRes = await withTimeout(supabase.from('item_master').select('id,company_id,item_code,item_name,description,item_type,item_class,item_subclass,base_uom_id,hsn_code,gst_rate,standard_rate,drawing_number,revision,is_batch_tracked,is_serial_tracked,is_active,created_at,updated_at,uom_master:uom_master!item_master_base_uom_id_fkey(uom_code,uom_name)').eq('company_id', selected.id).order('item_code').limit(1000), 'Materials lookup');
       if (itemRes.error) throw itemRes.error;
       setItems(itemRes.data || []);
     } catch (e) {
@@ -79,8 +89,12 @@ export default function App() {
   const signIn = async event => {
     event.preventDefault(); if (!supabase) return;
     setAuthBusy(true); setError('');
-    const { error: e } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (e) setError(e.message); setAuthBusy(false);
+    try {
+      const { error: e } = await withTimeout(supabase.auth.signInWithPassword({ email: email.trim(), password }), 'Sign-in');
+      if (e) setError(e.message);
+    } catch (e) {
+      setError(e?.message || 'Sign-in failed. Please try again.');
+    } finally { setAuthBusy(false); }
   };
   const saveItem = async event => {
     event.preventDefault(); if (!supabase || !company) return;
