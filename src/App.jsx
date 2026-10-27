@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowDownToLine, Boxes, Check, ChevronDown, CircleHelp, Command, FilePlus2, Filter, LayoutDashboard, LogOut, Menu, Moon, PackageSearch, Pencil, Plus, RefreshCw, Search, Settings2, ShieldCheck, Sun, X } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 
+const REQUEST_TIMEOUT_MS = 12000;
+const withTimeout = (promise, label = 'Supabase request') => Promise.race([
+  promise,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after 12 seconds. Check the deployment's Supabase URL, publishable key, network access, and RLS policies.`)), REQUEST_TIMEOUT_MS))
+];
+
 const blankItem = { item_code: '', item_name: '', description: '', item_type: 'RM', item_class: '', item_subclass: '', base_uom_id: '', hsn_code: '', gst_rate: '', standard_rate: '0', drawing_number: '', revision: '', is_batch_tracked: false, is_serial_tracked: false, is_active: true };
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(value || 0));
 const types = ['RM', 'SFG', 'FG', 'WIP', 'CONSUMABLE', 'SERVICE', 'PACKING'];
