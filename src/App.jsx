@@ -43,6 +43,8 @@ export default function App() {
   const [error, setError] = useState('');
   const [view, setView] = useState('Materials Master');
 
+  useEffect(() => { try { window.localStorage.setItem('swiza-erp-theme', dark ? 'dark' : 'light'); } catch {} }, [dark]);
+
   useEffect(() => {
     if (!supabase) { setAuthReady(true); return; }
     let alive = true;
