@@ -50,7 +50,7 @@ export default function UOMMasterPage({ supabase, setMessage, setError }) {
 
   const save = async event => {
     event.preventDefault();
-    const normalizedCode = code.trim().toUpperCase().replace(/\\s+/g, '_');
+    const normalizedCode = code.trim().toUpperCase().replace(/\s+/g, '_');
     const normalizedName = name.trim();
     const precision = Number(decimalPlaces);
     if (!normalizedCode || !normalizedName) { setError('UOM code and description are required.'); return; }
@@ -117,7 +117,7 @@ export default function UOMMasterPage({ supabase, setMessage, setError }) {
       <div className="drawer-head"><div><span className="eyebrow">{editing ? 'EDIT UOM' : 'NEW UOM'}</span><h2>{editing ? 'Edit unit of measure' : 'Create unit of measure'}</h2><p className="muted">Global units can be used by all authorized companies.</p></div>
       <button className="icon-btn" onClick={() => setFormOpen(false)} aria-label="Close form"><X size={19}/></button></div>
       <form className="item-form" onSubmit={save}><div className="form-grid">
-        <label>UOM code *<input required maxLength={20} value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/\\s+/g, '_'))} placeholder="e.g. NOS, KG, MM"/><small>Unique code; letters, numbers, hyphens and underscores.</small></label>
+        <label>UOM code *<input required maxLength={20} value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/\s+/g, '_'))} placeholder="e.g. NOS, KG, MM"/><small>Unique code; letters, numbers, hyphens and underscores.</small></label>
         <label>Description *<input required maxLength={100} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Number, Kilogram, Millimetre"/></label>
         <label>Category *<select required value={category} onChange={e => setCategory(e.target.value)}>{CATEGORIES.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
         <label>Decimal places *<select required value={decimalPlaces} onChange={e => setDecimalPlaces(e.target.value)}>{[0,1,2,3,4,5,6].map(value => <option key={value} value={value}>{value} {value === 0 ? '(whole units only)' : value === 3 ? '(default precision)' : ''}</option>)}</select><small>Precision used for quantity entry and display in future transactions.</small></label>
