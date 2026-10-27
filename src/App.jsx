@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowDownToLine, Boxes, Check, ChevronDown, CircleHelp, Command, FilePlus2, Filter, LayoutDashboard, LogOut, Menu, Moon, PackageSearch, Pencil, Plus, RefreshCw, Search, Settings2, ShieldCheck, Sun, X } from 'lucide-react';
+import { Activity, ArrowDownToLine, Boxes, Check, ChevronDown, CircleHelp, Command, FilePlus2, Filter, LayoutDashboard, LogOut, Menu, Moon, PackageSearch, Pencil, Plus, RefreshCw, Search, Settings2, ShieldCheck, Sun, Warehouse, X } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import MasterDataPage from './MasterDataPage';
 import UOMMasterPage from './UOMMasterPage';
