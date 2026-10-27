@@ -97,24 +97,51 @@ export default function App() {
     } finally { setAuthBusy(false); }
   };
   const saveItem = async event => {
-    event.preventDefault(); if (!supabase || !company) return;
-    if (!form.item_code.trim() || !form.item_name.trim() || !form.base_uom_id) { setError('Item code, item name, and base UOM are required.'); return; }
-    setSaving(true); setError('');
-    const payload = {
-      company_id: company.id, item_code: form.item_code.trim().toUpperCase(), item_name: form.item_name.trim(),
-      description: form.description.trim() || null, item_type: form.item_type, item_class: form.item_class.trim() || null,
-      item_subclass: form.item_subclass.trim() || null, base_uom_id: form.base_uom_id,
-      hsn_code: form.hsn_code.trim() || null, gst_rate: form.gst_rate === '' ? null : Number(form.gst_rate),
-      standard_rate: Number(form.standard_rate || 0), drawing_number: form.drawing_number.trim() || null,
-      revision: form.revision.trim() || null, is_batch_tracked: Boolean(form.is_batch_tracked),
-      is_serial_tracked: Boolean(form.is_serial_tracked), is_active: Boolean(form.is_active), updated_at: new Date().toISOString()
-    };
-    const result = editing
-      ? await supabase.from('item_master').update(payload).eq('id', editing.id).eq('company_id', company.id).select('id').maybeSingle()
-      : await supabase.from('item_master').insert(payload).select('id').maybeSingle();
-    if (result.error) { setError(result.error.message); setSaving(false); return; }
-    if (!result.data) { setError('No row was saved. Check item permissions and row-level security policies.'); setSaving(false); return; }
-    setSaving(false); setDrawerOpen(false); setMessage(editing ? 'Material updated.' : 'Material created.'); await loadWorkspace();
+    event.preventDefault();
+    if (!supabase || !company) return;
+    const code = form.item_code.trim().toUpperCase();
+    const name = form.item_name.trim();
+    const rate = Number(form.standard_rate);
+    const gst = form.gst_rate === '' ? null : Number(form.gst_rate);
+    if (!code || !name || !form.base_uom_id) {
+      setError('Item code, item name, and base UOM are required.');
+      return;
+    }
+    if (!Number.isFinite(rate) || rate < 0) {
+      setError('Standard rate must be a valid non-negative number.');
+      return;
+    }
+    if (gst !== null && (!Number.isFinite(gst) || gst < 0 || gst > 100)) {
+      setError('GST rate must be between 0 and 100.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const payload = {
+        company_id: company.id, item_code: code, item_name: name,
+        description: form.description.trim() || null, item_type: form.item_type,
+        item_class: form.item_class.trim() || null, item_subclass: form.item_subclass.trim() || null,
+        base_uom_id: form.base_uom_id, hsn_code: form.hsn_code.trim() || null,
+        gst_rate: gst, standard_rate: rate, drawing_number: form.drawing_number.trim() || null,
+        revision: form.revision.trim() || null, is_batch_tracked: Boolean(form.is_batch_tracked),
+        is_serial_tracked: Boolean(form.is_serial_tracked), is_active: Boolean(form.is_active),
+        updated_at: new Date().toISOString()
+      };
+      const result = await withTimeout(editing
+        ? supabase.from('item_master').update(payload).eq('id', editing.id).eq('company_id', company.id).select('id').maybeSingle()
+        : supabase.from('item_master').insert(payload).select('id').maybeSingle(), 'Save material');
+      if (result.error) throw result.error;
+      if (!result.data) throw new Error('No row was saved. Check item permissions and row-level security policies.');
+      setDrawerOpen(false);
+      setMessage(editing ? 'Material updated.' : 'Material created.');
+      await loadWorkspace();
+    } catch (e) {
+      setError(e?.message || 'Could not save material. Please retry.');
+    } finally {
+      setSaving(false);
+    }
   };
   const exportCsv = () => {
     const columns = ['item_code','item_name','description','item_type','item_class','item_subclass','uom_code','hsn_code','gst_rate','standard_rate','drawing_number','revision','is_batch_tracked','is_serial_tracked','is_active'];
