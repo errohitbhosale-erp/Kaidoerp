@@ -32,6 +32,7 @@ export default function App() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankItem);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [view, setView] = useState('Materials Master');
@@ -143,6 +144,76 @@ export default function App() {
       setSaving(false);
     }
   };
+  const importCsv = async event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !supabase || !company) return;
+    setImporting(true); setError(''); setMessage('');
+    try {
+      const text = await file.text();
+      const rows = [];
+      let row = [], cell = '', quoted = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '"' && quoted && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (ch === '"') quoted = !quoted;
+        else if (ch === ',' && !quoted) { row.push(cell.trim()); cell = ''; }
+        else if ((ch === '\n' || ch === '\r') && !quoted) {
+          if (ch === '\r' && text[i + 1] === '\n') i++;
+          row.push(cell.trim()); if (row.some(v => v !== '')) rows.push(row);
+          row = []; cell = '';
+        } else cell += ch;
+      }
+      row.push(cell.trim()); if (row.some(v => v !== '')) rows.push(row);
+      if (rows.length < 2) throw new Error('CSV must contain a header row and at least one material row.');
+      const headers = rows[0].map(h => h.replace(/^\uFEFF/, '').toLowerCase().replace(/[\s/-]+/g, '_'));
+      const col = key => headers.indexOf(key);
+      const required = ['item_code','item_name','item_type','base_uom_code'];
+      const missing = required.filter(k => col(k) < 0);
+      if (missing.length) throw new Error('Missing required CSV columns: ' + missing.join(', ') + '.');
+      const uomByCode = new Map(uoms.map(u => [u.uom_code.toLowerCase(), u.id]));
+      const seen = new Set(items.map(i => i.item_code.toUpperCase()));
+      const payload = [];
+      const rowErrors = [];
+      rows.slice(1).forEach((r, idx) => {
+        const value = key => col(key) < 0 ? '' : (r[col(key)] || '').trim();
+        const code = value('item_code').toUpperCase();
+        const name = value('item_name');
+        const type = value('item_type').toUpperCase();
+        const uom = uomByCode.get(value('base_uom_code').toLowerCase());
+        const rateText = value('standard_rate');
+        const rate = rateText ? Number(rateText) : 0;
+        if (!code || !name) rowErrors.push(`Row ${idx + 2}: item_code and item_name are required.`);
+        else if (seen.has(code)) rowErrors.push(`Row ${idx + 2}: duplicate item code ${code} (existing or repeated).`);
+        else if (!types.includes(type)) rowErrors.push(`Row ${idx + 2}: unsupported item_type ${type}.`);
+        else if (!uom) rowErrors.push(`Row ${idx + 2}: unknown base_uom_code ${value('base_uom_code')}.`);
+        else if (!Number.isFinite(rate) || rate < 0) rowErrors.push(`Row ${idx + 2}: invalid standard_rate.`);
+        else {
+          const gstText = value('gst_rate');
+          const gst = gstText ? Number(gstText) : null;
+          if (gst !== null && (!Number.isFinite(gst) || gst < 0 || gst > 100)) rowErrors.push(`Row ${idx + 2}: invalid gst_rate.`);
+          else {
+            seen.add(code);
+            payload.push({
+              company_id: company.id, item_code: code, item_name: name,
+              description: value('description') || null, item_type: type,
+              item_class: value('item_class') || null, item_subclass: value('item_subclass') || null,
+              base_uom_id: uom, standard_rate: rate, hsn_code: value('hsn_code') || null,
+              gst_rate: gst, is_active: true, is_batch_tracked: false, is_serial_tracked: false
+            });
+          }
+        }
+      });
+      if (!payload.length) throw new Error('No valid rows to import. ' + rowErrors.slice(0, 4).join(' '));
+      const result = await withTimeout(supabase.from('item_master').insert(payload).select('id'), 'CSV material import');
+      if (result.error) throw result.error;
+      setMessage(`Imported ${result.data?.length ?? payload.length} materials.` + (rowErrors.length ? ` Skipped ${rowErrors.length} invalid row(s): ${rowErrors.slice(0, 3).join(' ')}` : ''));
+      await loadWorkspace();
+    } catch (e) {
+      setError(e?.message || 'CSV import failed.');
+    } finally { setImporting(false); }
+  };
+
   const exportCsv = () => {
     const columns = ['item_code','item_name','description','item_type','item_class','item_subclass','uom_code','hsn_code','gst_rate','standard_rate','drawing_number','revision','is_batch_tracked','is_serial_tracked','is_active'];
     const csv = [columns.join(','), ...filteredItems.map(i => columns.map(k => {
@@ -164,7 +235,7 @@ export default function App() {
       <div className="page-content"><div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot"/> MASTER DATA / INVENTORY</div><h1>{view}</h1><p className="muted">A single, reliable catalog for every material in your operation.</p></div><div className="heading-actions"><button className="secondary" onClick={loadWorkspace} disabled={loading}><RefreshCw size={16} className={loading?'spin':''}/> Refresh</button><button className="primary" onClick={showNew}><Plus size={17}/> New material</button></div></div>
       {error && <div className="alert error"><span>{error}</span><button className="icon-btn" onClick={()=>setError('')} aria-label="Dismiss error"><X size={16}/></button></div>}{message && <div className="alert success"><Check size={17}/>{message}<button className="icon-btn" onClick={()=>setMessage('')} aria-label="Dismiss message"><X size={16}/></button></div>}
       <div className="stats-grid"><div className="stat-card"><div className="stat-top"><span>Total materials</span><span className="stat-icon"><Boxes size={17}/></span></div><div className="stat-value">{items.length.toLocaleString('en-IN')}</div><div className="stat-foot"><span className="stat-dot green"/> In selected company</div></div><div className="stat-card"><div className="stat-top"><span>Active items</span><span className="stat-icon"><Check size={17}/></span></div><div className="stat-value">{items.filter(i=>i.is_active).length.toLocaleString('en-IN')}</div><div className="stat-foot">Available for transactions</div></div><div className="stat-card"><div className="stat-top"><span>Item categories</span><span className="stat-icon"><Command size={17}/></span></div><div className="stat-value">{new Set(items.map(i=>i.item_type)).size}</div><div className="stat-foot">Types in your catalog</div></div><div className="stat-card"><div className="stat-top"><span>Tracked items</span><span className="stat-icon"><ShieldCheck size={17}/></span></div><div className="stat-value">{items.filter(i=>i.is_batch_tracked||i.is_serial_tracked).length}</div><div className="stat-foot">Batch or serial controlled</div></div></div>
-      <section className="data-panel"><div className="panel-title"><div><h2>Material catalog</h2><p className="muted">Manage item definitions, units, classifications and costing.</p></div><button className="secondary export-btn" onClick={exportCsv} disabled={!filteredItems.length}><ArrowDownToLine size={16}/> Export CSV</button></div><div className="toolbar"><div className="search-box"><Search size={17}/><input aria-label="Search materials" placeholder="Search code, name, description…" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button className="clear-search" onClick={()=>setQuery('')} aria-label="Clear search"><X size={14}/></button>}</div><div className="filter-wrap"><Filter size={16}/><select aria-label="Filter by type" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="ALL">All item types</option>{types.map(t=><option key={t}>{t}</option>)}</select></div><div className="filter-wrap"><select aria-label="Filter by status" value={activeFilter} onChange={e=>setActiveFilter(e.target.value)}><option value="active">Active items</option><option value="inactive">Inactive items</option><option value="all">All statuses</option></select></div><span className="result-count">{filteredItems.length} results</span></div>
+      <section className="data-panel"><div className="panel-title"><div><h2>Material catalog</h2><p className="muted">Manage item definitions, units, classifications and costing.</p></div><div className="heading-actions"><label className="secondary export-btn" style={{cursor:importing?'wait':'pointer'}}><FilePlus2 size={16}/>{importing?'Importing…':'Import CSV'}<input type="file" accept=".csv,text/csv" onChange={importCsv} disabled={importing} hidden/></label><button className="secondary export-btn" onClick={exportCsv} disabled={!filteredItems.length}><ArrowDownToLine size={16}/> Export CSV</button></div></div><div className="toolbar"><div className="search-box"><Search size={17}/><input aria-label="Search materials" placeholder="Search code, name, description…" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button className="clear-search" onClick={()=>setQuery('')} aria-label="Clear search"><X size={14}/></button>}</div><div className="filter-wrap"><Filter size={16}/><select aria-label="Filter by type" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="ALL">All item types</option>{types.map(t=><option key={t}>{t}</option>)}</select></div><div className="filter-wrap"><select aria-label="Filter by status" value={activeFilter} onChange={e=>setActiveFilter(e.target.value)}><option value="active">Active items</option><option value="inactive">Inactive items</option><option value="all">All statuses</option></select></div><span className="result-count">{filteredItems.length} results</span></div>
       <div className="table-scroll"><table><thead><tr><th>ITEM CODE / NAME</th><th>CLASSIFICATION</th><th>TYPE</th><th>BASE UOM</th><th>STANDARD RATE</th><th>STATUS</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{loading ? <tr><td colSpan="7"><div className="empty-state"><RefreshCw className="spin" size={22}/><b>Loading materials…</b><span>Reading your company catalog</span></div></td></tr> : filteredItems.length ? filteredItems.map(item=><tr key={item.id}><td><div className="item-identity"><span className="item-symbol"><PackageSearch size={17}/></span><div><b>{item.item_code}</b><span>{item.item_name}</span>{item.description&&<small>{item.description}</small>}</div></div></td><td><div className="class-cell">{item.item_class||'—'}{item.item_subclass&&<small>{item.item_subclass}</small>}</div></td><td><span className={'type-pill type-'+String(item.item_type).toLowerCase()}>{item.item_type}</span></td><td><span className="uom-code">{item.uom_master?.uom_code||'—'}</span></td><td className="rate-cell">{money(item.standard_rate)}</td><td><span className={'status-pill '+(item.is_active?'active':'inactive')}><span/>{item.is_active?'Active':'Inactive'}</span></td><td><button className="row-action" aria-label={'Edit '+item.item_code} title="Edit material" onClick={()=>showEdit(item)}><Pencil size={16}/></button></td></tr>) : <tr><td colSpan="7"><div className="empty-state"><div className="empty-icon"><PackageSearch size={24}/></div><b>{items.length?'No matching materials':'Your material catalog is ready'}</b><span>{items.length?'Try a different search or filter.':'Create your first material to begin building the catalog.'}</span>{!items.length&&<button className="primary" onClick={showNew}><Plus size={16}/> Create first material</button>}</div></td></tr>}</tbody></table></div><div className="table-footer"><span>Showing <b>{filteredItems.length}</b> of <b>{items.length}</b> materials</span><span><span className="live-dot"/> Live workspace data</span></div></section><footer className="page-footer"><span>SWIZA ERP <span className="footer-sep">/</span> Materials Master</span><span>Designed for precision manufacturing</span></footer></div></main>
     {drawerOpen && <div className="drawer-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setDrawerOpen(false)}}><aside className="drawer"><div className="drawer-head"><div><span className="eyebrow">{editing?'UPDATE MASTER DATA':'NEW MASTER DATA'}</span><h2>{editing?'Edit material':'Create material'}</h2><p className="muted">Required fields are marked with an asterisk.</p></div><button className="icon-btn" onClick={()=>setDrawerOpen(false)} aria-label="Close form"><X size={19}/></button></div><form className="item-form" onSubmit={saveItem}><div className="form-section-title">Basic information</div><div className="form-grid"><label>Item code *<input required maxLength="80" value={form.item_code} onChange={e=>setField('item_code',e.target.value)} placeholder="e.g. MPFC20501500" disabled={Boolean(editing)}/>{editing&&<small>Item code is locked after creation.</small>}</label><label>Item type *<select required value={form.item_type} onChange={e=>setField('item_type',e.target.value)}>{types.map(t=><option key={t}>{t}</option>)}</select></label><label className="full-field">Item name *<input required maxLength="200" value={form.item_name} onChange={e=>setField('item_name',e.target.value)} placeholder="Short, searchable material name"/></label><label className="full-field">Description<textarea rows="3" value={form.description||''} onChange={e=>setField('description',e.target.value)} placeholder="Dimensions, material grade, finish, specifications…"/></label></div><div className="form-section-title">Classification & units</div><div className="form-grid"><label>Class<input value={form.item_class||''} onChange={e=>setField('item_class',e.target.value)} placeholder="e.g. FRAME"/></label><label>Subclass<input value={form.item_subclass||''} onChange={e=>setField('item_subclass',e.target.value)} placeholder="e.g. FRNST"/></label><label>Base unit of measure *<select required value={form.base_uom_id} onChange={e=>setField('base_uom_id',e.target.value)}><option value="">Select UOM</option>{uoms.map(u=><option key={u.id} value={u.id}>{u.uom_code} — {u.uom_name}</option>)}</select></label><label>HSN / SAC code<input maxLength="20" value={form.hsn_code||''} onChange={e=>setField('hsn_code',e.target.value)} placeholder="Tax classification"/></label></div><div className="form-section-title">Costing & engineering</div><div className="form-grid"><label>Standard rate (₹)<input type="number" min="0" step="0.0001" value={form.standard_rate} onChange={e=>setField('standard_rate',e.target.value)} required/></label><label>GST rate (%)<input type="number" min="0" max="100" step="0.01" value={form.gst_rate} onChange={e=>setField('gst_rate',e.target.value)} placeholder="e.g. 18"/></label><label>Drawing number<input value={form.drawing_number||''} onChange={e=>setField('drawing_number',e.target.value)} placeholder="Drawing reference"/></label><label>Revision<input value={form.revision||''} onChange={e=>setField('revision',e.target.value)} placeholder="e.g. A / 01"/></label></div><div className="form-section-title">Tracking controls</div><div className="check-grid"><label className="check-row"><input type="checkbox" checked={Boolean(form.is_batch_tracked)} onChange={e=>setField('is_batch_tracked',e.target.checked)}/><span><b>Batch tracking</b><small>Track lots and batches</small></span></label><label className="check-row"><input type="checkbox" checked={Boolean(form.is_serial_tracked)} onChange={e=>setField('is_serial_tracked',e.target.checked)}/><span><b>Serial tracking</b><small>Track unique units</small></span></label><label className="check-row"><input type="checkbox" checked={Boolean(form.is_active)} onChange={e=>setField('is_active',e.target.checked)}/><span><b>Active item</b><small>Available for transactions</small></span></label></div>{error&&<div className="alert error">{error}</div>}<div className="drawer-actions"><button type="button" className="secondary" onClick={()=>setDrawerOpen(false)}>Cancel</button><button className="primary" disabled={saving}>{saving?'Saving…':<><Check size={16}/> {editing?'Save changes':'Create material'}</>}</button></div></form></aside></div>}
   </div>;
