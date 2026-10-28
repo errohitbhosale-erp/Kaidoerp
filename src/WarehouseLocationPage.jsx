@@ -60,6 +60,22 @@ export default function WarehouseLocationPage({ supabase, company, setMessage, s
     if (!code || (tab === 'warehouses' && !name)) { setError(tab === 'warehouses' ? 'Warehouse code and name are required.' : 'Location code is required.'); return; }
     if (tab === 'locations' && !form.warehouse_id) { setError('Select a warehouse for this location.'); return; }
     if (tab === 'locations' && editing?.id === form.parent_location_id) { setError('A location cannot be its own parent.'); return; }
+    if (tab === 'locations' && form.parent_location_id) {
+      const parent = locations.find(l => l.id === form.parent_location_id);
+      if (!parent || parent.warehouse_id !== form.warehouse_id) {
+        setError('Parent location must belong to the selected warehouse.'); return;
+      }
+      // Walk the proposed parent's ancestry; selecting a descendant would create a cycle.
+      let ancestorId = parent.id;
+      const visited = new Set();
+      while (ancestorId && !visited.has(ancestorId)) {
+        if (ancestorId === editing?.id) {
+          setError('A location cannot be placed under one of its own descendants.'); return;
+        }
+        visited.add(ancestorId);
+        ancestorId = locations.find(l => l.id === ancestorId)?.parent_location_id || null;
+      }
+    }
     const payload = { ...form, [codeKey]: code, [nameKey]: name || null };
     if (tab === 'warehouses') payload.company_id = company.id;
     else {
