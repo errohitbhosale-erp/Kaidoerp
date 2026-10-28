@@ -55,7 +55,7 @@ export default function WarehouseLocationPage({ supabase, company, setMessage, s
     e.preventDefault();
     const codeKey = tab === 'warehouses' ? 'warehouse_code' : 'location_code';
     const nameKey = tab === 'warehouses' ? 'warehouse_name' : 'location_name';
-    const code = String(form[codeKey] || '').trim().toUpperCase().replace(/\\s+/g, '-');
+    const code = String(form[codeKey] || '').trim().toUpperCase().replace(/\s+/g, '-');
     const name = String(form[nameKey] || '').trim();
     if (!code || (tab === 'warehouses' && !name)) { setError(tab === 'warehouses' ? 'Warehouse code and name are required.' : 'Location code is required.'); return; }
     if (tab === 'locations' && !form.warehouse_id) { setError('Select a warehouse for this location.'); return; }
