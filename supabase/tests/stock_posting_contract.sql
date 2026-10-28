@@ -19,6 +19,9 @@ BEGIN
   IF v_definition NOT LIKE '%Only APPROVED transactions can be posted%' THEN
     RAISE EXCEPTION 'Posting RPC must only post approved transactions';
   END IF;
+  IF v_definition NOT LIKE '%Insufficient quantity in batch%' OR v_definition NOT LIKE '%sl.lot_number=btrim(v_line.lot_number)%' THEN
+    RAISE EXCEPTION 'Posting RPC must validate available batch quantity for the selected lot/location';
+  END IF;
   IF v_definition NOT LIKE '%pg_advisory_xact_lock%' THEN
     RAISE EXCEPTION 'Posting RPC must serialize concurrent operations for the same serial';
   END IF;
