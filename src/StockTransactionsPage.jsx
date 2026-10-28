@@ -78,44 +78,33 @@ export default function StockTransactionsPage({ supabase, company, setMessage, s
       if (!line.location_id) return setLocalError('Select a location/bin for every line before saving.');
       if (item.is_batch_tracked && !line.lot_number.trim()) return setLocalError('Batch-controlled materials require a lot/batch number.');
       if (item.is_serial_tracked && !line.serial_number.trim()) return setLocalError('Serial-controlled materials require a serial number.');
-      if (line.location_id) {
-        const location = locations.find(l => l.id === line.location_id);
-        if (!location || location.warehouse_id !== line.warehouse_id) return setLocalError('Each selected bin must belong to its selected warehouse.');
-      }
+      const location = locations.find(l => l.id === line.location_id);
+      if (!location || location.warehouse_id !== line.warehouse_id) return setLocalError('Each selected bin must belong to its selected warehouse.');
     }
     setSaving(true);
     try {
-      let txnId = editing?.id;
-      if (editing) {
-        if (editing.status !== 'DRAFT' || editing.created_by !== (await supabase.auth.getUser()).data.user?.id) throw new Error('Only your own draft transactions can be edited.');
-        const { error: he } = await supabase.from('stock_txn_header').update({
-          txn_type: form.txn_type, txn_date: new Date(form.txn_date).toISOString(),
-          reference_no: form.reference_no.trim() || null, source_document_type: form.source_document_type.trim() || null,
-          source_document_no: form.source_document_no.trim() || null, remarks: form.remarks.trim() || null
-        }).eq('id', txnId).eq('company_id', company.id).eq('status', 'DRAFT');
-        if (he) throw he;
-        const { error: de } = await supabase.from('stock_txn_line').delete().eq('company_id', company.id).eq('txn_id', txnId);
-        if (de) throw de;
-      } else {
-        const userResult = await supabase.auth.getUser();
-        if (userResult.error || !userResult.data.user) throw new Error('Your session expired. Sign in again.');
-        const documentNo = 'STK-' + new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14) + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
-        const idempotencyKey = crypto.randomUUID();
-        const { data, error: he } = await supabase.from('stock_txn_header').insert({
-          company_id: company.id, document_no: documentNo, txn_type: form.txn_type,
-          txn_date: new Date(form.txn_date).toISOString(), status: 'DRAFT',
-          source_document_type: form.source_document_type.trim() || null, source_document_no: form.source_document_no.trim() || null,
-          reference_no: form.reference_no.trim() || null, remarks: form.remarks.trim() || null,
-          idempotency_key: idempotencyKey, created_by: userResult.data.user.id
-        }).select('id').single();
-        if (he) throw he;
-        txnId = data.id;
-      }
       const userResult = await supabase.auth.getUser();
-      const payload = lines.map((l,i) => ({ company_id: company.id, txn_id: txnId, line_no: i+1, item_id: l.item_id, warehouse_id: l.warehouse_id, location_id: l.location_id, qty: Number(l.qty), unit_cost: Number(l.unit_cost), lot_number: l.lot_number.trim() || null, serial_number: l.serial_number.trim() || null, line_remarks: l.line_remarks.trim() || null, created_by: userResult.data.user.id }));
-      const { error: le } = await supabase.from('stock_txn_line').insert(payload);
-      if (le) throw le;
-      setMessage(editing ? 'Draft transaction updated. Stock balances were not changed.' : 'Draft transaction saved. Stock balances were not changed.');
+      if (userResult.error || !userResult.data.user) throw new Error('Your session expired. Sign in again.');
+      if (editing && (editing.status !== 'DRAFT' || editing.created_by !== userResult.data.user.id)) {
+        throw new Error('Only your own draft transactions can be edited.');
+      }
+      const documentNo = editing?.document_no || ('STK-' + new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14) + '-' + Math.random().toString(36).slice(2,6).toUpperCase());
+      const payload = lines.map(l => ({
+        item_id: l.item_id, warehouse_id: l.warehouse_id, location_id: l.location_id,
+        qty: Number(l.qty), unit_cost: Number(l.unit_cost),
+        lot_number: l.lot_number.trim() || null, serial_number: l.serial_number.trim() || null,
+        line_remarks: l.line_remarks.trim() || null
+      }));
+      const { error: saveError } = await supabase.rpc('save_stock_transaction_draft', {
+        p_txn_id: editing?.id || null, p_company_id: company.id, p_document_no: documentNo,
+        p_txn_type: form.txn_type, p_txn_date: new Date(form.txn_date).toISOString(),
+        p_reference_no: form.reference_no.trim() || null,
+        p_source_document_type: form.source_document_type.trim() || null,
+        p_source_document_no: form.source_document_no.trim() || null,
+        p_remarks: form.remarks.trim() || null, p_lines: payload
+      });
+      if (saveError) throw saveError;
+      setMessage(editing ? 'Draft transaction updated atomically. Stock balances were not changed.' : 'Draft transaction saved. Stock balances were not changed.');
       setOpen(false); await load();
     } catch (e) { setLocalError(e?.message || 'Could not save draft transaction.'); }
     finally { setSaving(false); }
