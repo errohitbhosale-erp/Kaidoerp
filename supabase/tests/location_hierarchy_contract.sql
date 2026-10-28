@@ -28,8 +28,10 @@ BEGIN
      AND c.relname = 'location_master'
      AND t.tgname = 'trg_validate_location_master_hierarchy'
      AND NOT t.tgisinternal
+     AND (t.tgtype & 1) = 1
      AND (t.tgtype & 2) = 2
-     AND (t.tgtype & 4) = 4;
+     AND (t.tgtype & 4) = 4
+     AND (t.tgtype & 16) = 16;
 
   IF v_trigger_count <> 1 THEN
     RAISE EXCEPTION 'Expected hierarchy trigger on INSERT and row-level operations';
