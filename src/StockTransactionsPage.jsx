@@ -26,6 +26,7 @@ export default function StockTransactionsPage({ supabase, company, setMessage, s
   const [editing, setEditing] = useState(null);
   const [lines, setLines] = useState([blankLine()]);
   const [form, setForm] = useState({ txn_type: 'GRN', txn_date: localDateTime(), reference_no: '', source_document_type: '', source_document_no: '', remarks: '' });
+  const [newDocumentNo, setNewDocumentNo] = useState('');
   const [localError, setLocalError] = useState('');
   const [preview, setPreview] = useState(null);
   const [previewLines, setPreviewLines] = useState([]);
@@ -55,6 +56,7 @@ export default function StockTransactionsPage({ supabase, company, setMessage, s
   const patchLine = (idx, key, value) => setLines(old => old.map((line,i) => i === idx ? { ...line, [key]: value, ...(key === 'warehouse_id' ? { location_id: '' } : {}) } : line));
   const startNew = () => {
     setEditing(null);
+    setNewDocumentNo('STK-' + new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14) + '-' + Math.random().toString(36).slice(2,6).toUpperCase());
     setForm({ txn_type: 'GRN', txn_date: localDateTime(), reference_no: '', source_document_type: '', source_document_no: '', remarks: '' });
     setLines([blankLine()]); setLocalError(''); setError(''); setOpen(true);
   };
@@ -110,14 +112,15 @@ export default function StockTransactionsPage({ supabase, company, setMessage, s
       if (editing && (editing.status !== 'DRAFT' || editing.created_by !== userResult.data.user.id)) {
         throw new Error('Only your own draft transactions can be edited.');
       }
-      const documentNo = editing?.document_no || ('STK-' + new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14) + '-' + Math.random().toString(36).slice(2,6).toUpperCase());
+      const documentNo = editing?.document_no || newDocumentNo;
+      if (!documentNo) throw new Error('Could not prepare a document number. Close and reopen the form.');
       const payload = lines.map(l => ({
         item_id: l.item_id, warehouse_id: l.warehouse_id, location_id: l.location_id,
         qty: Number(l.qty), unit_cost: Number(l.unit_cost),
         lot_number: l.lot_number.trim() || null, serial_number: l.serial_number.trim() || null,
         line_remarks: l.line_remarks.trim() || null
       }));
-      const { error: saveError } = await supabase.rpc('save_stock_transaction_draft', {
+      const { data: savedDraft, error: saveError } = await supabase.rpc('save_stock_transaction_draft', {
         p_txn_id: editing?.id || null, p_company_id: company.id, p_document_no: documentNo,
         p_txn_type: form.txn_type, p_txn_date: new Date(form.txn_date).toISOString(),
         p_reference_no: form.reference_no.trim() || null,
@@ -126,7 +129,7 @@ export default function StockTransactionsPage({ supabase, company, setMessage, s
         p_remarks: form.remarks.trim() || null, p_lines: payload
       });
       if (saveError) throw saveError;
-      setMessage(editing ? 'Draft transaction updated atomically. Stock balances were not changed.' : 'Draft transaction saved. Stock balances were not changed.');
+      setMessage(savedDraft?.idempotent_replay ? 'This save was already completed. The existing draft is in the register; no duplicate was created.' : (editing ? 'Draft transaction updated atomically. Stock balances were not changed.' : 'Draft transaction saved. Stock balances were not changed.'));
       setOpen(false); await load();
     } catch (e) { setLocalError(e?.message || 'Could not save draft transaction.'); }
     finally { setSaving(false); }
