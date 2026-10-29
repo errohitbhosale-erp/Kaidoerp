@@ -49,7 +49,7 @@ export default function ReorderLevelsPage({ supabase, company, setMessage, setEr
       const maximum = form.maximum_qty === '' ? null : Number(form.maximum_qty);
       if (![minimum,reorder,lead].every(Number.isFinite) || minimum < 0 || reorder < 0 || lead < 0 || (maximum !== null && (!Number.isFinite(maximum) || maximum < minimum))) throw new Error('Enter valid non-negative quantities; maximum must be at least the minimum.');
       const user = await supabase.auth.getUser();
-      const payload = { company_id:company.id,item_id:form.item_id,warehouse_id:form.warehouse_id,minimum_qty:minimum,reorder_qty:reorder,maximum_qty:maximum,lead_time_days:lead,notes:form.notes.trim() || null,is_active:true,updated_by:user.data?.user?.id || null };
+      const payload = { company_id:company.id,item_id:form.item_id,warehouse_id:form.warehouse_id,minimum_qty:minimum,reorder_qty:reorder,maximum_qty:maximum,lead_time_days:lead,notes:form.notes.trim() || null,is_active:true,updated_at:new Date().toISOString(),updated_by:user.data?.user?.id || null };
       const { error: saveError } = await supabase.from('stock_reorder_settings').upsert(payload,{ onConflict:'company_id,item_id,warehouse_id' });
       if (saveError) throw saveError;
       setOpen(false); setMessage(editing ? 'Reorder level updated.' : 'Reorder level saved.'); await load();
@@ -57,7 +57,7 @@ export default function ReorderLevelsPage({ supabase, company, setMessage, setEr
     finally { setSaving(false); }
   };
   const toggle = async rule => {
-    const { error: updateError } = await supabase.from('stock_reorder_settings').update({ is_active:!rule.is_active }).eq('company_id',company.id).eq('item_id',rule.item_id).eq('warehouse_id',rule.warehouse_id);
+    const { error: updateError } = await supabase.from('stock_reorder_settings').update({ is_active:!rule.is_active, updated_at:new Date().toISOString() }).eq('company_id',company.id).eq('item_id',rule.item_id).eq('warehouse_id',rule.warehouse_id);
     if (updateError) { setLocalError(updateError.message); return; }
     setMessage(rule.is_active ? 'Reorder level disabled; stock history retained.' : 'Reorder level enabled.'); await load();
   };
