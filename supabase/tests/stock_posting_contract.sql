@@ -4,11 +4,43 @@
 DO $test$
 DECLARE
   v_definition text;
+  v_save_definition text;
+  v_submit_definition text;
+  v_approve_definition text;
   v_anon_can_execute boolean;
   v_authenticated_can_execute boolean;
 BEGIN
   SELECT pg_catalog.pg_get_functiondef('public.post_stock_transaction(uuid)'::regprocedure)
     INTO v_definition;
+
+  SELECT pg_catalog.pg_get_functiondef('public.save_stock_transaction_draft(uuid,uuid,text,text,timestamp with time zone,text,text,text,text,jsonb)'::regprocedure)
+    INTO v_save_definition;
+  SELECT pg_catalog.pg_get_functiondef('public.submit_stock_transaction(uuid)'::regprocedure)
+    INTO v_submit_definition;
+  SELECT pg_catalog.pg_get_functiondef('public.approve_stock_transaction(uuid)'::regprocedure)
+    INTO v_approve_definition;
+
+  IF v_save_definition NOT LIKE '%Authentication required%' OR v_save_definition NOT LIKE '%current_user_has_company_role%' THEN
+    RAISE EXCEPTION 'Draft save must authenticate and authorize company access';
+  END IF;
+  IF v_save_definition NOT LIKE '%idempotent_replay%' THEN
+    RAISE EXCEPTION 'Draft save must be retry-safe for an existing document number';
+  END IF;
+  IF v_save_definition NOT LIKE '%Only DRAFT transactions can be edited%' THEN
+    RAISE EXCEPTION 'Only drafts may be edited';
+  END IF;
+  IF v_submit_definition NOT LIKE '%Authentication required%' OR v_submit_definition NOT LIKE '%current_user_has_company_role%' THEN
+    RAISE EXCEPTION 'Submission must authenticate and authorize company access';
+  END IF;
+  IF v_submit_definition NOT LIKE '%Only DRAFT transactions can be submitted%' THEN
+    RAISE EXCEPTION 'Only drafts may be submitted';
+  END IF;
+  IF v_submit_definition NOT LIKE '%batch%' OR v_submit_definition NOT LIKE '%serial%' THEN
+    RAISE EXCEPTION 'Submission must validate batch and serial tracking';
+  END IF;
+  IF v_approve_definition NOT LIKE '%Only pending transactions can be approved%' OR v_approve_definition NOT LIKE '%A different user must approve this transaction%' THEN
+    RAISE EXCEPTION 'Approval must require pending status and separation of duties';
+  END IF;
 
   IF v_definition NOT LIKE '%Authentication required%' THEN
     RAISE EXCEPTION 'Posting RPC must reject unauthenticated calls';
