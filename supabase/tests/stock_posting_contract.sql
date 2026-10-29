@@ -38,6 +38,13 @@ BEGIN
     RAISE EXCEPTION 'Posting RPC must be idempotent for already-posted documents';
   END IF;
 
+  IF v_definition LIKE '%insert into public.stock_balances(company_id,item_id,warehouse_id,location_id,qty_on_hand_base,qty_reserved_base,qty_available_base%' THEN
+    RAISE EXCEPTION 'Posting RPC must not insert into generated qty_available_base';
+  END IF;
+  IF v_definition LIKE '%qty_available_base=(public.stock_balances.qty_on_hand_base+excluded.qty_on_hand_base)%' THEN
+    RAISE EXCEPTION 'Posting RPC must not assign generated qty_available_base on conflict';
+  END IF;
+
   SELECT
     pg_catalog.has_function_privilege('anon', 'public.post_stock_transaction(uuid)', 'EXECUTE'),
     pg_catalog.has_function_privilege('authenticated', 'public.post_stock_transaction(uuid)', 'EXECUTE')
