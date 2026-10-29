@@ -69,3 +69,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
  .heading-actions button{min-height:38px}
  .page-footer{font-size:9px;gap:7px}
 }
+
+/* Independent, collapsible navigation groups */
+.nav-group{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
+.nav-group-heading{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.09em;text-align:left;cursor:pointer}
+.nav-group-heading>span{flex:1;min-width:0}
+.nav-group-heading>svg:first-child{color:var(--emerald);flex:none}
+.nav-group-heading:hover{background:var(--panel-soft);color:var(--text)}
+.group-chevron{transition:transform .18s ease;flex:none}.group-chevron.open{transform:rotate(180deg)}
+.nav-group-items{display:grid;gap:2px;padding:3px 0 2px 7px}
+.nav-group-items .nav-item{padding-left:12px}
+@media(max-width:800px){.nav-group-heading{min-height:42px}.nav-group-items .nav-item{min-height:40px}}
