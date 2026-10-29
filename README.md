@@ -1,6 +1,6 @@
-# Swiza ERP — Materials Master
+# KaidoERP — Manufacturing ERP
 
-A React + Vite foundation for the Swiza ERP Materials Master, using the existing Supabase project and a navy/emerald responsive UI.
+A React + Vite foundation for the KaidoERP manufacturing ERP, using the existing Supabase project and a navy/emerald responsive UI.
 
 ## Run locally
 
