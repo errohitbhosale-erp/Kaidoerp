@@ -47,7 +47,7 @@ export default function ReorderLevelsPage({ supabase, company, setMessage, setEr
       if (!form.item_id || !form.warehouse_id) throw new Error('Select both an item and warehouse.');
       const minimum = Number(form.minimum_qty), reorder = Number(form.reorder_qty), lead = Number(form.lead_time_days);
       const maximum = form.maximum_qty === '' ? null : Number(form.maximum_qty);
-      if (![minimum,reorder,lead].every(Number.isFinite) || minimum < 0 || reorder < 0 || lead < 0 || (maximum !== null && (!Number.isFinite(maximum) || maximum < minimum))) throw new Error('Enter valid non-negative quantities; maximum must be at least the minimum.');
+      if (![minimum,reorder,lead].every(Number.isFinite) || minimum < 0 || reorder < minimum || lead < 0 || (maximum !== null && (!Number.isFinite(maximum) || maximum < reorder))) throw new Error('Use non-negative values and keep minimum ≤ reorder quantity ≤ maximum quantity.');
       const user = await supabase.auth.getUser();
       const payload = { company_id:company.id,item_id:form.item_id,warehouse_id:form.warehouse_id,minimum_qty:minimum,reorder_qty:reorder,maximum_qty:maximum,lead_time_days:lead,notes:form.notes.trim() || null,is_active:true,updated_at:new Date().toISOString(),updated_by:user.data?.user?.id || null };
       const { error: saveError } = await supabase.from('stock_reorder_settings').upsert(payload,{ onConflict:'company_id,item_id,warehouse_id' });
