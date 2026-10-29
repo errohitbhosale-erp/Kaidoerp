@@ -2,12 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Plus, RefreshCw, Search, X, Save, Eye, AlertTriangle, Send, CheckCircle, PackageCheck, Printer, ArrowLeft } from 'lucide-react';
 
 const TYPES = [
-  ['GRN', 'Goods Receipt'],
-  ['PRODUCTION_ISSUE', 'Material Issue'],
-  ['TRANSFER', 'Stock Transfer (coming soon — source/destination model required)'],
+  ['OPENING', 'Opening Stock'],
+  ['GRN', 'Goods Receipt (GRN)'],
+  ['PURCHASE_RETURN', 'Return to Supplier'],
+  ['PRODUCTION_ISSUE', 'Material Issue to Production'],
+  ['PRODUCTION_RETURN', 'Material Return from Production'],
+  ['SUBCON_OUT', 'Issue to Subcontractor'],
+  ['SUBCON_IN', 'Receipt from Subcontractor'],
+  ['CUSTOMER_RETURN', 'Customer Return'],
+  ['DISPATCH', 'Dispatch / Delivery'],
   ['ADJUSTMENT_IN', 'Stock Adjustment In'],
   ['ADJUSTMENT_OUT', 'Stock Adjustment Out'],
-  ['OPENING', 'Opening Stock'],
+  ['SCRAP', 'Scrap Issue'],
+  ['TRANSFER', 'Stock Transfer (disabled until source/destination model is added)'],
 ];
 const fmt = value => Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 4 });
 const blankLine = () => ({ item_id: '', warehouse_id: '', location_id: '', qty: '1', unit_cost: '0', lot_number: '', serial_number: '', line_remarks: '' });
