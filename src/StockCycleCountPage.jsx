@@ -84,6 +84,7 @@ export default function StockCycleCountPage({ supabase, company, setMessage, set
   };
   const submit=async()=>{
     if(!selected||selected.status!=='DRAFT')return;
+    if(!lines.length){setLocalError('This count has no stock lines. Add stock to the selected warehouse or choose another warehouse before submitting.');return;}
     if(lines.some(l=>l.counted_qty==='')){setLocalError('Enter a physical count for every line before submitting.');return;}
     setSaving(true);setLocalError('');
     try{
